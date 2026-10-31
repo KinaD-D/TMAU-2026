@@ -8,6 +8,8 @@
 #include <cmath>
 #include <memory>
 #include <algorithm>
+#include <functional>
+#include <map>
 
 // Абстрактный базовый класс
 class Model {
@@ -18,11 +20,10 @@ public:
     virtual std::string name() const   = 0;
 };
 
-// Model 1.5: y_{t+1} = a1*y_t + a2*y_{t-k} + b*u_t
 class Model15 : public Model {
 public:
     Model15(double a1, double a2, double b, int k)
-        : a1_(a1), a2_(a2), b_(b), k_(k) { reset(); }
+        : a1_(a1), a2_(a2), b_(b), k_(k), y_(1, 0.0) {}
     void reset() override { y_.assign(1, 0.0); }
     double step(double u) override {
         const std::size_t t   = y_.size() - 1;
@@ -38,10 +39,9 @@ private:
     double a1_, a2_, b_; int k_; std::vector<double> y_;
 };
 
-// Model 2.7: y_{t+1} = a*y_t + b*relay(u, y_t)
 class Model27 : public Model {
 public:
-    Model27(double a, double b, double eps) : a_(a), b_(b), eps_(eps) { reset(); }
+    Model27(double a, double b, double eps) : a_(a), b_(b), eps_(eps), y_prev_(0.0) {}
     void reset() override { y_prev_ = 0.0; }
     double step(double u) override {
         double r;
@@ -57,10 +57,9 @@ private:
     double a_, b_, eps_, y_prev_;
 };
 
-// Model 3.9: dy/dt = b*tanh(u)  ->  y_{t+1} = y_t + dt*b*tanh(u)
 class Model39 : public Model {
 public:
-    Model39(double b, double dt) : b_(b), dt_(dt) { reset(); }
+    Model39(double b, double dt) : b_(b), dt_(dt), y_(0.0) {}
     void reset() override { y_ = 0.0; }
     double step(double u) override { y_ += dt_ * b_ * std::tanh(u); return y_; }
     std::string name() const override { return "Model 3.9"; }
@@ -131,42 +130,71 @@ Model 3.9 parameters:
 )";
 }
 
-static Config parseArgs(int argc, char** argv) {
-    Config c;
-    for (int i = 1; i < argc; ++i) {
-        std::string a = argv[i];
-        auto next = [&](const char* what) -> std::string {
-            if (i + 1 >= argc) {
-                std::cerr << "Missing value after " << what << "\n"; std::exit(1);
-            }
-            return std::string(argv[++i]);
-        };
-        try {
-            if      (a == "--models") {
-                c.models.clear();
-                std::stringstream ss(next("--models"));
-                std::string tok;
-                while (std::getline(ss, tok, ',')) if (!tok.empty()) c.models.insert(tok);
-            }
-            else if (a == "--n")        c.n       = std::stoi(next("--n"));
-            else if (a == "--input")    c.inputs  = next("--input");
-            else if (a == "--out")      c.outFile = next("--out");
-            else if (a == "--m15-a1")   c.m15_a1  = std::stod(next("--m15-a1"));
-            else if (a == "--m15-a2")   c.m15_a2  = std::stod(next("--m15-a2"));
-            else if (a == "--m15-b")    c.m15_b   = std::stod(next("--m15-b"));
-            else if (a == "--m15-k")    c.m15_k   = std::stoi(next("--m15-k"));
-            else if (a == "--m27-a")    c.m27_a   = std::stod(next("--m27-a"));
-            else if (a == "--m27-b")    c.m27_b   = std::stod(next("--m27-b"));
-            else if (a == "--m27-eps")  c.m27_eps = std::stod(next("--m27-eps"));
-            else if (a == "--m39-b")    c.m39_b   = std::stod(next("--m39-b"));
-            else if (a == "--m39-dt")   c.m39_dt  = std::stod(next("--m39-dt"));
-            else if (a == "--help" || a == "-h") { printHelp(); std::exit(0); }
-            else { std::cerr << "Unknown argument: " << a << "\n"; std::exit(1); }
-        } catch (const std::exception& e) {
-            std::cerr << "Bad value for " << a << ": " << e.what() << "\n"; std::exit(1);
+
+static void parseModelsArg(Config& c, const std::string& v) {
+    c.models.clear();
+    std::stringstream ss(v);
+    std::string tok;
+    while (std::getline(ss, tok, ',')) {
+        if (!tok.empty()) {
+            c.models.insert(tok);
         }
     }
-    if (c.n <= 0) { std::cerr << "--n must be > 0\n"; std::exit(1); }
+}
+
+static Config parseArgs(int argc, char** argv) {
+    Config c;
+
+    using Setter = std::function<void(Config&, const std::string&)>;
+    static const std::map<std::string, Setter> setters = {
+        {"--n",       [](Config& c, const std::string& v){ c.n        = std::stoi(v); }},
+        {"--input",   [](Config& c, const std::string& v){ c.inputs   = v; }},
+        {"--out",     [](Config& c, const std::string& v){ c.outFile  = v; }},
+        {"--m15-a1",  [](Config& c, const std::string& v){ c.m15_a1   = std::stod(v); }},
+        {"--m15-a2",  [](Config& c, const std::string& v){ c.m15_a2   = std::stod(v); }},
+        {"--m15-b",   [](Config& c, const std::string& v){ c.m15_b    = std::stod(v); }},
+        {"--m15-k",   [](Config& c, const std::string& v){ c.m15_k    = std::stoi(v); }},
+        {"--m27-a",   [](Config& c, const std::string& v){ c.m27_a    = std::stod(v); }},
+        {"--m27-b",   [](Config& c, const std::string& v){ c.m27_b    = std::stod(v); }},
+        {"--m27-eps", [](Config& c, const std::string& v){ c.m27_eps  = std::stod(v); }},
+        {"--m39-b",   [](Config& c, const std::string& v){ c.m39_b    = std::stod(v); }},
+        {"--m39-dt",  [](Config& c, const std::string& v){ c.m39_dt   = std::stod(v); }},
+    };
+
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+
+        if (a == "--help" || a == "-h") {
+            printHelp();
+            std::exit(0);
+        }
+        if (i + 1 >= argc) {
+            std::cerr << "Missing value after " << a << "\n";
+            std::exit(1);
+        }
+        const std::string v = argv[++i];
+
+        try {
+            if (a == "--models") {
+                parseModelsArg(c, v);
+                continue;
+            }
+            const auto it = setters.find(a);
+            if (it == setters.end()) {
+                std::cerr << "Unknown argument: " << a << "\n";
+                std::exit(1);
+            }
+            it->second(c, v);
+        } catch (const std::exception& e) {
+            std::cerr << "Bad value for " << a << ": " << e.what() << "\n";
+            std::exit(1);
+        }
+    }
+
+    if (c.n <= 0) {
+        std::cerr << "--n must be > 0\n";
+        std::exit(1);
+    }
     return c;
 }
 

@@ -59,7 +59,7 @@ def print_table(model, inp, rows):
         print(f"{t:>5} | {u:>10.4f} | {y:>12.4f}")
 
 
-def build_panels(data, spec, overlay):
+def build_panels(spec, overlay):
     """panel = [(label, model, input), ...]; returns list of panels."""
     if overlay:
         return [[(f"{m}/{i}", m, i) for m, ins in spec for i in ins]]
@@ -84,7 +84,7 @@ def main():
             for i in ins:
                 print_table(m, i, data[m][i])
 
-    panels = build_panels(data, spec, a.overlay)
+    panels = build_panels(spec, a.overlay)
     n = len(panels)
     fig, axes = plt.subplots(1, n, figsize=(4.5 * n, 4), squeeze=False)
     for ax, panel in zip(axes[0], panels):

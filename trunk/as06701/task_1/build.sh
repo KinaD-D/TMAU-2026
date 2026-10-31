@@ -8,8 +8,8 @@ CPP_ARGS=()
 PY_ARGS=()
 SEP="cpp"
 for arg in "$@"; do
-    if [ "$arg" = "--" ]; then SEP="py"; continue; fi
-    if [ "$SEP" = "cpp" ]; then CPP_ARGS+=("$arg"); else PY_ARGS+=("$arg"); fi
+    if [[ "$arg" = "--" ]]; then SEP="py"; continue; fi
+    if [[ "$SEP" = "cpp" ]]; then CPP_ARGS+=("$arg"); else PY_ARGS+=("$arg"); fi
 done
 
 # --- сборка ---
@@ -27,7 +27,7 @@ echo ">>> C++ args: ${CPP_ARGS[*]:-<none>}"
 CSV="output.csv"
 prev=""
 for arg in "${CPP_ARGS[@]}"; do
-    if [ "$prev" = "--out" ]; then CSV="$arg"; fi
+    if [[ "$prev" = "--out" ]]; then CSV="$arg"; fi
     prev="$arg"
 done
 
