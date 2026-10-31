@@ -65,28 +65,25 @@ def build_panels(spec, overlay):
         return [[(f"{m}/{i}", m, i) for m, ins in spec for i in ins]]
     return [[(i, m, i) for i in ins] for m, ins in spec]
 
-
-def main():
-    a = parse_args()
-    data = load(a.csv)
-    if not data:
-        sys.exit(f"No data in {a.csv}")
-
-    if a.plots:
-        spec = [r for r in (resolve(data, s.strip()) for s in a.plots.split(",")) if r]
+def resolve_spec(data, plots):
+    """Вернуть [(model, [inputs...]), ...]. Без plots — все модели."""
+    if plots:
+        spec = [r for r in (resolve(data, s.strip()) for s in plots.split(",")) if r]
         if not spec:
             sys.exit("[error] no --plots matched")
-    else:
-        spec = [(m, [i for i in INPUTS_ORDER if i in data[m]]) for m in sorted(data)]
+        return spec
+    return [(m, [i for i in INPUTS_ORDER if i in data[m]]) for m in sorted(data)]
 
-    if not a.no_tables:
-        for m, ins in spec:
-            for i in ins:
-                print_table(m, i, data[m][i])
 
-    panels = build_panels(spec, a.overlay)
+def print_all_tables(spec, data):
+    for m, ins in spec:
+        for i in ins:
+            print_table(m, i, data[m][i])
+
+
+def draw(panels, data, overlay, png, show):
     n = len(panels)
-    fig, axes = plt.subplots(1, n, figsize=(4.5 * n, 4), squeeze=False)
+    _, axes = plt.subplots(1, n, figsize=(4.5 * n, 4), squeeze=False)
     for ax, panel in zip(axes[0], panels):
         for label, m, i in panel:
             rows = data[m][i]
@@ -94,18 +91,29 @@ def main():
                     label=label, linewidth=1.2)
         ax.set_xlabel("tau")
         ax.set_ylabel("y")
-        ax.set_title("overlay" if a.overlay else panel[0][1])
+        ax.set_title("overlay" if overlay else panel[0][1])
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8)
-
     plt.tight_layout()
-    plt.savefig(a.png, dpi=120)
-    print(f"\nSaved {a.png}")
-    if not a.no_show:
+    plt.savefig(png, dpi=120)
+    print(f"\nSaved {png}")
+    if show:
         try:
             plt.show()
         except Exception as e:
-            print(f"No window: {e}. See {a.png}")
+            print(f"No window: {e}. See {png}")
+
+
+def main():
+    a = parse_args()
+    data = load(a.csv)
+    if not data:
+        sys.exit(f"No data in {a.csv}")
+    spec = resolve_spec(data, a.plots)
+    if not a.no_tables:
+        print_all_tables(spec, data)
+    panels = build_panels(spec, a.overlay)
+    draw(panels, data, a.overlay, a.png, not a.no_show)
 
 
 if __name__ == "__main__":
